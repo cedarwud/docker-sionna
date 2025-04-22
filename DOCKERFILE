@@ -1,0 +1,40 @@
+# ---------------------------------------------------------------------------
+# Build with:   docker build -t sionna_102 -f DOCKERFILE .
+# ---------------------------------------------------------------------------
+
+# Base image: TensorFlow 2.19.0 GPU + Jupyter
+# Sionna 1.0 supports TF 2.14–2.19; 2.16/2.17 have known issues.
+FROM tensorflow/tensorflow:2.19.0-gpu-jupyter
+
+# System tools needed by Dr.Jit (Sionna‑RT CPU backend)
+RUN apt-get update && \
+    apt-get install -y llvm && \
+    rm -rf /var/lib/apt/lists/* /var/cache/apt
+
+# Optional: work‑around for rare Mitsuba/OptiX crashes
+RUN ln -s /usr/lib/x86_64-linux-gnu/libcuda.so.1 /usr/lib/libcuda.so || true
+
+# Copy repo into container and switch to it
+COPY . /tmp
+WORKDIR /tmp
+
+# Install Sionna‑RT first, then Sionna itself
+RUN pip install --upgrade pip && \
+    pip install ext/sionna-rt/ && \
+    pip install .
+
+# Keep JupyterLab & kernel current
+RUN pip install --upgrade ipykernel jupyterlab
+
+# Put the tutorial notebooks where Jupyter starts (/tf)
+RUN rm -rf /tf/* && \
+    cp -R /tmp/tutorials /tf && \
+    chmod -R 777 /tf
+
+# Clean up build context
+RUN rm -rf /tmp
+WORKDIR /tf
+
+EXPOSE 8888
+CMD ["jupyter", "lab", "--port=8888", "--no-browser", "--NotebookApp.token=''", \
+     "--ip=0.0.0.0", "--allow-root", "--NotebookApp.allow_origin='*'"]
